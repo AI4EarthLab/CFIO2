@@ -11,8 +11,8 @@ program main
 
     integer :: rank, size, ierr
     integer :: all_comm, compute_comm
-    integer :: IO_process_per_node = 10
-    integer :: IO_process_per_var = 2
+    integer :: IO_process_per_node = 10 ! Number of I/O processes on each node
+    integer :: IO_process_per_var = 2   ! Number of IO processes per variable
     integer, dimension(3) :: global, start, count
     integer, dimension(2) :: dims,coords
     character(len=128) :: dim_name(3)

@@ -3,35 +3,46 @@ from gym import spaces
 import numpy as np
 from stable_baselines3 import PPO
 import random
+from collections import Counter
 
 # Parameters:
-Time_wait_cost = 1
-Num_process_per_nodes = 10               # 假设每个节点最大I/O进程数为10
-Num_nodes = 20                           # 假设有20个节点
-Var_size = 4                             # GB
+# The cost of waiting for the next I/O process during forwarding
+Time_wait_cost = 0.001
+
+# Maximum number of I/O processes per node
+Num_process_per_nodes = 10
+
+# number of Nodes
+Num_nodes = 20
+
+# size of each variable (GB)
+Var_size = 4
+
+# Max num of vars
 Max_vars = 50
+
+# Mapping between the number of processes and the forwarding speed(GB)
 forwarding_speed = {
-    1: 3,   # 1个节点对应的速度
-    2: 6,   # 2个节点对应的速度
-    4: 12,  # 4个节点对应的速度
-    8: 24,  # 8个节点对应的速度
-    16: 48  # 16个节点对应的速度
-}
-out_put_speed = {
-    1: 1,   # 1个节点对应的速度
-    2: 1.5,   # 2个节点对应的速度
-    4: 3,  # 4个节点对应的速度
-    8: 5,  # 8个节点对应的速度
-    16: 8  # 16个节点对应的速度
+    1: 3.1,
+    2: 6,
+    4: 11.7,
+    8: 20.4,
+    16: 23.8,
+    32: 24.8
 }
 
-##############################################################################
-# IO_process_each_nodes = [0] * Num_nodes  # 初始化每个节点的IO进程为0
-# Total_GB = 0
-# Total_IO_process = 0
-# Num_process_each_var = []
-# Forwarding_times = 0
-# Forwarding_vars = 0
+# Mapping between the number of processes and the I/O speed(GB)
+out_put_speed = {
+    1: 0.9,
+    2: 1.5,
+    4: 3.1,
+    8: 5.9,
+    16: 8.4,
+    32: 9.1
+}
+
+# For each additional variable output at the same time, the speed needs to have a discount
+discount = 0.95
 
 
 class IOEnv(gym.Env):
@@ -91,86 +102,69 @@ class IOEnv(gym.Env):
                 Var_size/forwarding_speed[b]
 
             self.Total_GB = self.Total_GB + Var_size
-            
+
             count_nodes = 0
             iteration_counts = []
             while count_nodes < b:
-                x = random.randint(0, Num_nodes - 1)  # 随机选择一个节点
+                x = random.randint(0, Num_nodes - 1)
                 if self.IO_process_each_nodes[x] < Num_process_per_nodes:
                     self.IO_process_each_nodes[x] += 1
                     count_nodes += 1
-                    iteration_counts.append(x)  # 添加当前迭代数字
+                    iteration_counts.append(x)
             extra_wait_time = sum(iteration_counts) * Time_wait_cost
-            
-            
-            forwarding_time = Var_size/out_put_speed[b]
-            reward = extra_wait_time * 0.1
-            # reward = 0
+
+            reward = -extra_wait_time
             self.state = np.array(
                 [self.Total_IO_process, self.Forwarding_vars])
             done = False
             return self.state, reward, done, {}
 
-        if a == 1:  # output
+        if a == 1:
             if self.Forwarding_vars == 0:
                 self.state = np.array(
                     [self.Total_IO_process, self.Forwarding_vars])
                 done = True
                 reward = -1
-                # print(self.state)
                 return self.state, reward, done, {}
 
-            print(self.Num_process_each_var)
+            # print(self.Num_process_each_var)
             minimum_value = min(self.Num_process_each_var)
-            speed = out_put_speed[minimum_value]
+            speed = out_put_speed[minimum_value] * \
+                (discount ** self.Forwarding_vars)
             output_time = Var_size/speed
             through_put = self.Total_GB/(self.Forwarding_times+output_time)
             reward = through_put
             done = True
             self.state = np.array(
                 [self.Total_IO_process, self.Forwarding_vars])
-            # print(self.state)
             return self.state, reward, done, {}
 
     def render(self, action=None, reward=None):
-        """可视化当前状态、动作和奖励"""
-        print(f"Current state: {self.state[0]:.2f}")
-        if action is not None:
-            print(f"Action taken: {action}")
-        if reward is not None:
-            print(f"Reward received: {reward}")
+        return self.Num_process_each_var
+        # print(f"Current Num_process_each_var: {self.Num_process_each_var}")
 
 
-# 创建自定义环境实例
 env = IOEnv()
 
-# 初始化PPO模型
 model = PPO("MlpPolicy", env,  verbose=1)
 
-# 开始训练模型
-model.learn(total_timesteps=10000000)
+model.learn(total_timesteps=50000)
 
-# 保存模型
-model.save("ppo_custom_env")
+print("#"*50)
 
-# 加载模型进行测试
-loaded_model = PPO.load("ppo_custom_env")
+state = env.reset()
 
-# 测试模型
-# obs = env.reset()
-# for _ in range(1000):
-#     action, _states = loaded_model.predict(obs)
-#     obs, reward, done, info = env.step(action)
-#     env.render(action=action, reward=reward)  # 传递当前动作和奖励
-#     if done:
-#         obs = env.reset()
+sets = []
+for _ in range(100):
+    action, _ = model.predict(state)
+    state, reward, done, _ = env.step(action)
+    if done:
+        sets.append(env.render(action=action, reward=reward))
+# print(sets)
 
-# count_nodes = 0
-# iteration_counts = []
-# while count_nodes < b:
-#     x = random.randint(0, Num_nodes - 1)  # 随机选择一个节点
-#     if IO_process_each_nodes[x] < Num_process_per_nodes:
-#         IO_process_each_nodes[x] += 1
-#         count_nodes += 1
-#         iteration_counts.append(x)  # 添加当前迭代数字
-# Time_cost = sum(iteration_counts) * Time_wait_cost
+sets_as_tuples = [tuple(s) for s in sets]
+counter = Counter(sets_as_tuples)
+most_common_set = counter.most_common(1)[0]
+print(
+    f"The best strategy is: {most_common_set[0]} .")
+

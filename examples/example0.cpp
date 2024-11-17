@@ -37,8 +37,8 @@ int main(int argc, char **argv)
     MPI_Comm compute_comm;
     MPI_Comm_split(MPI_COMM_WORLD, rank > 0, rank, &compute_comm);
 
-    int IO_process_per_node = 10; // 每个节点上IO进程个数
-    int IO_process_per_var = 2;   // 每个变量IO进程个数
+    int IO_process_per_node = 10; // Number of I/O processes on each node
+    int IO_process_per_var = 2;   // Number of IO processes per variable
 
     cfio2_init(all_comm, IO_process_per_node, IO_process_per_var);
 
