@@ -1,5 +1,7 @@
 #include <control_center.h>
+#include <unordered_set>
 using namespace std;
+std::unordered_set<std::string> set_filename;
 
 int IO_process_per_node;
 int p_size;
@@ -280,6 +282,12 @@ extern "C"
     }
     void cfio2_put_vara(MPI_Comm all_comm, string filename_in, string var_name, int datatype, string dim_name[3], int global[3], int start[3], int count[3], void *buf, int append)
     {
+        if (set_filename.find(filename_in) != set_filename.end())
+        {
+            std::cerr << "Cannot output to the same NC file before cfio2_wait_output operation." << std::endl;
+        }
+        set_filename.insert(filename_in);
+
         int myrank;
 
         MPI_Comm_rank(all_comm, &myrank);
@@ -345,6 +353,7 @@ extern "C"
     }
     void cfio2_wait_output(MPI_Comm all_comm)
     {
+        set_filename.clear();
         int myrank;
         MPI_Comm_rank(all_comm, &myrank);
         int global[3];

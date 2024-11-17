@@ -89,7 +89,7 @@ int main(int argc, char **argv)
 
         for (int i = 0; i < 1; i++)
         {
-            int append = 1;
+            int append = 0;
             string filename;
             string varname = "temperature_" + to_string(i);
 
