@@ -5,7 +5,8 @@ A fast input/output library for high-resolution climate models Version 2
 
 1.  Getting Started
 2.  Testing the CFIO2 installation
-3.  Reporting Installation or Usage Problems
+3.  Some suggestions
+4.  Reporting Installation or Usage Problems
 
 
 ### 1. Getting Started
@@ -79,7 +80,14 @@ For testing CFIO2, the command is:
 
 After execution, you will see the generated nc files.
 
+### 3. Some suggestions
 
-### 3. Reporting Installation or Usage Problems
+(a) Choosing how many I/O processes to use for caching each variable, as well as the maximum number of I/O processes allowed per node, are two important parameters. Properly setting these parameters can maximize hardware resource utilization and accelerate output speed.
+
+(b) During the output phase, each different communication domain outputs NC files simultaneously. To maximize the output bandwidth of different communication domains and reduce mutual interference, it is best to avoid writing to the same NC file within a close time frame during the `cfio2_put_vara` stage.
+
+(c) Choosing the right moment to call `cfio2_wait_output` is also important. This function is similar to the `MPI_Wait` operation, ensuring that data is actually written to disk. Although data will automatically be output to disk at the appropriate time even without using this function, calling it can guarantee that the data is written in advance, potentially improving output speed.
+
+### 4. Reporting Installation or Usage Problems
 
 Please report the problems on our github: https://github.com/AI4EarthLab/CFIO2/issues

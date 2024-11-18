@@ -19,7 +19,7 @@ private:
     static std::vector<std::string> processNames;
 
 public:
-    static void gatherNames(int slave_num, int multi_nodes, MPI_Comm all_comm)
+    static void gatherNames(int slave_num, MPI_Comm all_comm)
     {
         char processorName[MPI_MAX_PROCESSOR_NAME];
         int nameLen;
@@ -38,14 +38,11 @@ public:
         {
             MPI_Recv(&processNames[i][0], MPI_MAX_PROCESSOR_NAME, MPI_CHAR, i, 0, all_comm, MPI_STATUS_IGNORE);
         }
-
-        if (multi_nodes)
-            for (int i = 0; i < processNames.size(); ++i)
-            {
-                std::string newName = "Process_" + std::to_string(i);
-                std::fill(processNames[i].begin(), processNames[i].end(), '\0'); // 清空原有内容
-                std::copy(newName.begin(), newName.end(), processNames[i].begin());
-            }
+        // 广播每个节点名称
+        for (int i = 1; i < slave_num + 1; ++i)
+        {
+            MPI_Bcast(&processNames[i][0], MPI_MAX_PROCESSOR_NAME, MPI_CHAR, 0, all_comm);
+        }
     }
     static string get_rank_name(int rank)
     {

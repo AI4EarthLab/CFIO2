@@ -4,45 +4,27 @@ import numpy as np
 from stable_baselines3 import PPO
 import random
 from collections import Counter
+import json
+
+# Load parameters from config file
+with open('config.json') as f:
+    config = json.load(f)
 
 # Parameters:
-# The cost of waiting for the next I/O process during forwarding
-Time_wait_cost = 0.001
-
-# Maximum number of I/O processes per node
-Num_process_per_nodes = 10
-
-# number of Nodes
-Num_nodes = 20
-
-# size of each variable (GB)
-Var_size = 4
-
-# Max num of vars
-Max_vars = 50
+Time_wait_cost = config["Time_wait_cost"]
+Num_process_per_nodes = config["Num_process_per_nodes"]
+Num_nodes = config["Num_nodes"]
+Var_size = config["Var_size"]
+Max_vars = config["Max_vars"]
 
 # Mapping between the number of processes and the forwarding speed(GB)
-forwarding_speed = {
-    1: 3.1,
-    2: 6,
-    4: 11.7,
-    8: 20.4,
-    16: 23.8,
-    32: 24.8
-}
+forwarding_speed = {int(k): v for k, v in config["forwarding_speed"].items()}
 
 # Mapping between the number of processes and the I/O speed(GB)
-out_put_speed = {
-    1: 0.9,
-    2: 1.5,
-    4: 3.1,
-    8: 5.9,
-    16: 8.4,
-    32: 9.1
-}
+out_put_speed = {int(k): v for k, v in config["out_put_speed"].items()}
 
 # For each additional variable output at the same time, the speed needs to have a discount
-discount = 0.95
+discount = config["discount"]
 
 
 class IOEnv(gym.Env):
@@ -56,14 +38,13 @@ class IOEnv(gym.Env):
         self.Forwarding_times = 0
         self.Forwarding_vars = 0
 
-        self.action_space = spaces.Discrete(
-            2*len(forwarding_speed))
+        self.action_space = spaces.Discrete(2 * len(forwarding_speed))
         self.observation_space = spaces.MultiDiscrete(
-            [Num_process_per_nodes*Num_nodes, Max_vars])
+            [Num_process_per_nodes * Num_nodes, Max_vars]
+        )
         self.state = np.array([0, 0])
 
     def reset(self):
-
         self.IO_process_each_nodes = [0] * Num_nodes
         self.Total_GB = 0
         self.Total_IO_process = 0
@@ -75,33 +56,31 @@ class IOEnv(gym.Env):
         return self.state
 
     def step(self, action):
-
         a = action % 2
         b_index = action // 2
         b = list(forwarding_speed.keys())[b_index]
+
         if a == 0:  # forwarding
-            if self.Total_IO_process + b >= Num_process_per_nodes*Num_nodes:
+            if self.Total_IO_process + b >= Num_process_per_nodes * Num_nodes:
                 reward = 0
                 done = True
                 self.state = np.array(
                     [self.Total_IO_process, self.Forwarding_vars])
                 return self.state, reward, done, {}
 
-            if self.Forwarding_vars + 1 > Max_vars-1:
+            if self.Forwarding_vars + 1 > Max_vars - 1:
                 reward = 0
                 done = True
                 self.state = np.array(
                     [self.Total_IO_process, self.Forwarding_vars])
                 return self.state, reward, done, {}
 
-            self.Forwarding_vars = self.Forwarding_vars+1
+            self.Forwarding_vars += 1
             self.Num_process_each_var.append(b)
-            self.Total_IO_process = self.Total_IO_process + b
+            self.Total_IO_process += b
 
-            self.Forwarding_times = self.Forwarding_times + \
-                Var_size/forwarding_speed[b]
-
-            self.Total_GB = self.Total_GB + Var_size
+            self.Forwarding_times += Var_size / forwarding_speed[b]
+            self.Total_GB += Var_size
 
             count_nodes = 0
             iteration_counts = []
@@ -127,13 +106,13 @@ class IOEnv(gym.Env):
                 reward = -1
                 return self.state, reward, done, {}
 
-            # print(self.Num_process_each_var)
             minimum_value = min(self.Num_process_each_var)
             speed = out_put_speed[minimum_value] * \
                 (discount ** self.Forwarding_vars)
-            output_time = Var_size/speed
-            through_put = self.Total_GB/(self.Forwarding_times+output_time)
+            output_time = Var_size / speed
+            through_put = self.Total_GB / (self.Forwarding_times + output_time)
             reward = through_put
+
             done = True
             self.state = np.array(
                 [self.Total_IO_process, self.Forwarding_vars])
@@ -141,16 +120,15 @@ class IOEnv(gym.Env):
 
     def render(self, action=None, reward=None):
         return self.Num_process_each_var
-        # print(f"Current Num_process_each_var: {self.Num_process_each_var}")
 
 
 env = IOEnv()
 
-model = PPO("MlpPolicy", env,  verbose=1)
+model = PPO("MlpPolicy", env, verbose=1)
 
 model.learn(total_timesteps=50000)
 
-print("#"*50)
+print("#" * 50)
 
 state = env.reset()
 
@@ -160,11 +138,8 @@ for _ in range(100):
     state, reward, done, _ = env.step(action)
     if done:
         sets.append(env.render(action=action, reward=reward))
-# print(sets)
 
 sets_as_tuples = [tuple(s) for s in sets]
 counter = Counter(sets_as_tuples)
 most_common_set = counter.most_common(1)[0]
-print(
-    f"The best strategy is: {most_common_set[0]} .")
-
+print(f"The best strategy is: {most_common_set[0]} .")

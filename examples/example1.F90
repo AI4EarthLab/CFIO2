@@ -92,7 +92,7 @@ program main
         
         endtime = MPI_Wtime()
         
-        print *, "Control took ", endtime - starttime , " seconds"
+        print *, "Tooks ", endtime - starttime , " seconds"
 
        
         

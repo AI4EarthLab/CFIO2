@@ -24,7 +24,7 @@ class Control
 {
 
 public:
-    void gather_process_names(int multi_nodes, MPI_Comm all_comm);
+    void gather_process_names(MPI_Comm all_comm);
     void startScheduling(MPI_Comm all_comm);
 
 private:

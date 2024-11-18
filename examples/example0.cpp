@@ -135,7 +135,7 @@ int main(int argc, char **argv)
             // }
         }
         endtime = MPI_Wtime();
-        printf("Control tooks %f secodes\n", endtime - starttime);
+        printf("Tooks %f secodes\n", endtime - starttime);
 
         cfio2_finalize(all_comm);
     }

@@ -5,13 +5,14 @@ std::unordered_set<std::string> set_filename;
 
 int IO_process_per_node;
 int p_size;
+int uniqueNames_for_slave;
 
-void Control::gather_process_names(int multi_nodes, MPI_Comm all_comm)
+void Control::gather_process_names(MPI_Comm all_comm)
 {
     int slave_num;
     MPI_Comm_size(all_comm, &slave_num);
     slave_num--;
-    ProcessNameCollector::gatherNames(slave_num, multi_nodes, all_comm);
+    ProcessNameCollector::gatherNames(slave_num, all_comm);
 }
 void Control::startScheduling(MPI_Comm all_comm)
 {
@@ -229,8 +230,7 @@ extern "C"
         {
             Control ctrl;
 
-            int virtual_multinodes = 0;
-            ctrl.gather_process_names(virtual_multinodes, all_comm);
+            ctrl.gather_process_names(all_comm);
 
             ctrl.startScheduling(all_comm);
         }
@@ -243,6 +243,23 @@ extern "C"
             std::string machineName(processorName, nameLen);
 
             MPI_Send(&machineName[0], machineName.size() + 1, MPI_CHAR, 0, 0, all_comm);
+
+            std::vector<std::string> processNames;
+
+            processNames.resize(size);
+            for (auto &name : processNames)
+                name.resize(MPI_MAX_PROCESSOR_NAME); // 预先分配足够的空间
+
+            // 广播每个节点名称
+            for (int i = 1; i < size; ++i)
+            {
+                MPI_Bcast(&processNames[i][0], MPI_MAX_PROCESSOR_NAME, MPI_CHAR, 0, all_comm);
+            }
+
+            std::set<std::string> uniqueNames;
+            for (int i = 1; i < size; ++i)
+                uniqueNames.insert(processNames[i]);
+            uniqueNames_for_slave = uniqueNames.size();
         }
     }
 
@@ -282,15 +299,19 @@ extern "C"
     }
     void cfio2_put_vara(MPI_Comm all_comm, string filename_in, string var_name, int datatype, string dim_name[3], int global[3], int start[3], int count[3], void *buf, int append)
     {
-        if (set_filename.find(filename_in) != set_filename.end())
-        {
-            std::cerr << "Cannot output to the same NC file before cfio2_wait_output operation." << std::endl;
-        }
-        set_filename.insert(filename_in);
-
         int myrank;
 
         MPI_Comm_rank(all_comm, &myrank);
+
+        // std::cout << (set_filename.size() + 1) * p_size << " " << uniqueNames_for_slave << " " << IO_process_per_node << std::endl;
+
+        // 遇到相同nc文件名
+        if ((set_filename.find(filename_in) != set_filename.end()) || ((set_filename.size() + 1) * p_size > uniqueNames_for_slave * IO_process_per_node))
+        {
+            // std::cerr << "Cannot output to the same NC file before cfio2_wait_output operation." << std::endl;
+            cfio2_wait_output(all_comm);
+        }
+        set_filename.insert(filename_in);
 
         const char *filename = filename_in.c_str();
 
@@ -390,8 +411,12 @@ extern "C"
     {
         int myrank;
         MPI_Comm_rank(all_comm, &myrank);
+
         if (myrank == 0)
             return;
+
+        cfio2_wait_output(all_comm);
+
         int global[3];
         int start[3];
         int count[3];
