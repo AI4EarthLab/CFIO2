@@ -6,6 +6,7 @@ std::unordered_set<std::string> set_filename;
 int IO_process_per_node;
 int p_size;
 int uniqueNames_for_slave;
+int available_slave;
 
 void Control::gather_process_names(MPI_Comm all_comm)
 {
@@ -260,6 +261,16 @@ extern "C"
             for (int i = 1; i < size; ++i)
                 uniqueNames.insert(processNames[i]);
             uniqueNames_for_slave = uniqueNames.size();
+            std::map<std::string, int> nameCount;
+
+            for (int i = 1; i < size; ++i)
+                nameCount[processNames[i]]++;
+
+            available_slave=0;
+            for (const auto& entry : nameCount) {
+                available_slave+=std::min(entry.second,IO_process_per_node);
+            }
+
         }
     }
 
@@ -306,7 +317,8 @@ extern "C"
         // std::cout << (set_filename.size() + 1) * p_size << " " << uniqueNames_for_slave << " " << IO_process_per_node << std::endl;
 
         // 遇到相同nc文件名
-        if ((set_filename.find(filename_in) != set_filename.end()) || ((set_filename.size() + 1) * p_size > uniqueNames_for_slave * IO_process_per_node))
+        //if ((set_filename.find(filename_in) != set_filename.end()) || ((set_filename.size() + 1) * p_size > uniqueNames_for_slave * IO_process_per_node))
+        if ((set_filename.find(filename_in) != set_filename.end()) || ((set_filename.size() + 1) * p_size > available_slave))
         {
             // std::cerr << "Cannot output to the same NC file before cfio2_wait_output operation." << std::endl;
             cfio2_wait_output(all_comm);
